@@ -1,0 +1,65 @@
+Metadata-Version: 2.1
+Name: mmengine
+Version: 0.10.4
+Summary: Engine of OpenMMLab projects
+Home-page: https://github.com/open-mmlab/mmengine
+Author: MMEngine Authors
+Author-email: openmmlab@gmail.com
+Classifier: Development Status :: 4 - Beta
+Classifier: License :: OSI Approved :: Apache Software License
+Classifier: Operating System :: OS Independent
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.7
+Classifier: Programming Language :: Python :: 3.8
+Classifier: Programming Language :: Python :: 3.9
+Classifier: Programming Language :: Python :: 3.10
+Classifier: Topic :: Utilities
+Requires-Python: >=3.7
+Description-Content-Type: text/markdown
+Requires-Dist: addict
+Requires-Dist: matplotlib
+Requires-Dist: numpy
+Requires-Dist: pyyaml
+Requires-Dist: regex; sys_platform == "win32"
+Requires-Dist: rich
+Requires-Dist: termcolor
+Requires-Dist: yapf
+Requires-Dist: opencv-python>=3
+Provides-Extra: all
+Requires-Dist: addict; extra == "all"
+Requires-Dist: matplotlib; extra == "all"
+Requires-Dist: numpy; extra == "all"
+Requires-Dist: pyyaml; extra == "all"
+Requires-Dist: regex; sys_platform == "win32" and extra == "all"
+Requires-Dist: rich; extra == "all"
+Requires-Dist: termcolor; extra == "all"
+Requires-Dist: yapf; extra == "all"
+Requires-Dist: aim<=3.17.5; sys_platform != "win32" and extra == "all"
+Requires-Dist: bitsandbytes; extra == "all"
+Requires-Dist: clearml; extra == "all"
+Requires-Dist: coverage; extra == "all"
+Requires-Dist: dadaptation; extra == "all"
+Requires-Dist: dvclive; extra == "all"
+Requires-Dist: lion-pytorch; extra == "all"
+Requires-Dist: lmdb; extra == "all"
+Requires-Dist: mlflow; extra == "all"
+Requires-Dist: parameterized; extra == "all"
+Requires-Dist: pydantic==1.10.9; extra == "all"
+Requires-Dist: pytest; extra == "all"
+Requires-Dist: transformers; extra == "all"
+Provides-Extra: tests
+Requires-Dist: aim<=3.17.5; sys_platform != "win32" and extra == "tests"
+Requires-Dist: bitsandbytes; extra == "tests"
+Requires-Dist: clearml; extra == "tests"
+Requires-Dist: coverage; extra == "tests"
+Requires-Dist: dadaptation; extra == "tests"
+Requires-Dist: dvclive; extra == "tests"
+Requires-Dist: lion-pytorch; extra == "tests"
+Requires-Dist: lmdb; extra == "tests"
+Requires-Dist: mlflow; extra == "tests"
+Requires-Dist: parameterized; extra == "tests"
+Requires-Dist: pydantic==1.10.9; extra == "tests"
+Requires-Dist: pytest; extra == "tests"
+Requires-Dist: transformers; extra == "tests"
+
+# AvmPept
