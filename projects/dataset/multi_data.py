@@ -6,6 +6,7 @@ from PIL import Image, ImageDraw
 import json
 import csv
 import cv2
+from labelme.utils import shape_to_mask
 
 def create_palette(csv_filepath):
     color_to_class = {}
@@ -49,30 +50,30 @@ class ParkData(VisionDataset):
         # mask_path = os.path.join(self.root, self.mask_folder, '007356.json')
         # print(self.masks[index])
         img = Image.open(img_path).convert('RGB')
-        with open(mask_path, 'r', encoding='utf-8') as file:
-            mask_dct = json.load(file)
-        objects = mask_dct['objects'][0]
-        mask_data = np.zeros_like(img)
-        if 'Multi' in objects['feature_type']:
-            pt_list = np.array(objects['point_list'][0],dtype='int32')
-            cv2.fillConvexPoly(mask_data, pt_list, (10,10,10))
-            for j in range(1, len(objects['point_list'])):
-                pt_list1 = np.array(objects['point_list'][j],dtype='int32')
-                cv2.fillConvexPoly(mask_data, pt_list1, (50,50,50))
-        else:
-            pt_list = np.array(objects['point_list'],dtype='int32')
-            cv2.fillConvexPoly(mask_data, pt_list, (10,10,10))
-        mask = Image.fromarray(mask_data)
-        with open(label_path, 'r', encoding='utf-8') as file:
-            label_dct = json.load(file)
-        slots = label_dct['objects']
-
         ori_size = img.size
         input_size = (512, 512)
         input_size = (256, 256)
         scale = input_size[0] / ori_size[0]
         img = img.resize(input_size)
-        mask = mask.resize(input_size, Image.NEAREST)
+
+        with open(mask_path, 'r', encoding='utf-8') as file:
+            mask_dct = json.load(file)
+        objects = mask_dct['objects'][0]
+        if 'Multi' in objects['feature_type']:
+            points = [[min(item[0]*scale,input_size[0]-1), min(item[1]*scale,input_size[1]-1)] for item in objects['point_list'][0]]
+            mask_idx = shape_to_mask(img.size, points)
+            for j in range(1, len(objects['point_list'])):
+                points = [[min(item[0]*scale,input_size[0]-1), min(item[1]*scale,input_size[1]-1)] for item in objects['point_list'][j]]
+                mask_idx1 = shape_to_mask(img.size, points)
+                mask_idx = np.logical_and(mask_idx, np.logical_not(mask_idx1))
+        else:
+            points = [[min(item[0]*scale,input_size[0]-1), min(item[1]*scale,input_size[1]-1)] for item in objects['point_list']]
+            mask_idx = shape_to_mask(img.size, points)
+
+
+        with open(label_path, 'r', encoding='utf-8') as file:
+            label_dct = json.load(file)
+        slots = label_dct['objects']
         pld_cls = []
         pld_pts = []
         for i in range(len(slots)):
@@ -91,14 +92,9 @@ class ParkData(VisionDataset):
             img = self.transform(img)
 
         # Convert the RGB values to class indices
-        mask = np.array(mask)
-        mask = mask[:, :, 0] * 65536 + mask[:, :, 1] * 256 + mask[:, :, 2]
-        fs_labels = np.zeros_like(mask, dtype=np.int64)
-        for color, class_index in self.color_to_class.items():
-            rgb = color[0] * 65536 + color[1] * 256 + color[2]
-            fs_labels[mask == rgb] = class_index
+        fs_labels = np.zeros(input_size, dtype=np.int64)
+        fs_labels[mask_idx] = 1
 
-        # labels = labels>=2
         if self.target_transform is not None:
             fs_labels = self.target_transform(fs_labels)
 
