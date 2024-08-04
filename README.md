@@ -1,5 +1,5 @@
 # AvmPept
-环视相机全景图，停车位检测、可行使区域检测、多任务感知；后续再增加用于定位和建图的元素，如减速带、车道线、道路箭头。
+环视相机全景图感知多任务，包括停车位、可行使区域、减速带、车道线、道路箭头检测。
 
 (备注：开源模型，开源数据，开源框架，**非量产、非工程方案**)
 
@@ -21,6 +21,7 @@ data_loader, model用**pytorch**搭建，训练测试runner用**mmengine**搭建
 
 ### 3 方案简介(持续优化)
 （非常感谢**博登智能**分享提供的环视泊车数据集，本人仅在学习中使用）
+- 数据增强：亮度调节、旋转、翻转
 - backbone+neck：resnet18, FPN,  尝试使用ASPP(语义分割deeplabv3)
 - pld_head：车位类型，角点检测，进入线，分割线检测，focal_loss, L1_loss
 - fs_head：语义分割，bce_loss, lovasz_loss
@@ -30,4 +31,6 @@ data_loader, model用**pytorch**搭建，训练测试runner用**mmengine**搭建
 
 权重下载：待上传
 
-视频效果：
+视频效果：https://www.bilibili.com/video/BV1r5i3eSEbk/?spm_id_from=333.999.0.0
+
+https://space.bilibili.com/328243224/video
