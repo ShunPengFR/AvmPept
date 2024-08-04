@@ -5,10 +5,8 @@ from torch.optim import AdamW,SGD
 from mmengine.optim import AmpOptimWrapper, OptimWrapper
 from mmengine.runner import Runner
 
-import sys
-sys.path.append(".")
-# from projects.models.res18_fpn import ParkModel
-from projects.models.res50_deeplabv3 import ParkModel
+from projects.models.res18_fpn import ParkModel
+# from projects.models.res50_deeplabv3 import ParkModel
 from projects.dataset.multi_data import ParkData
 from projects.metric.multi_metric import MultiMetric
 
@@ -23,6 +21,7 @@ target_transform = transforms.Lambda(
 
 ### data set
 train_set = ParkData(
+    'train',
     r'G:\dnn\data\Boden_AVM_002000_019999\train',
     img_folder='images',
     mask_folder='fs_labels',
@@ -30,6 +29,7 @@ train_set = ParkData(
     transform=transform,
     target_transform=target_transform)
 valid_set = ParkData(
+    'test',
     r'G:\dnn\data\Boden_AVM_002000_019999\test',
     img_folder='images',
     mask_folder='fs_labels',
@@ -53,8 +53,9 @@ val_dataloader = dict(
 # task_name = 'pld'
 # task_name = 'freespace'
 task_name = 'multi_task'
+num_seg_cls = 5
 runner = Runner(
-    model=ParkModel(task_name),
+    model=ParkModel(task_name, num_seg_cls),
     work_dir='./work_dir',
     train_dataloader=train_dataloader,
     optim_wrapper=dict(type=OptimWrapper, optimizer=dict(type=AdamW, lr=2e-4)),

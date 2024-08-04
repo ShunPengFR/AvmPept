@@ -6,7 +6,10 @@ from PIL import Image, ImageDraw
 import json
 import csv
 import cv2
+import random
 from labelme.utils import shape_to_mask
+
+from projects.dataset.data_aug import rotate_data, flip_data
 
 def create_palette(csv_filepath):
     color_to_class = {}
@@ -19,6 +22,7 @@ def create_palette(csv_filepath):
 
 class ParkData(VisionDataset):
     def __init__(self,
+                 mode,
                  root,
                  img_folder,
                  mask_folder,
@@ -27,15 +31,19 @@ class ParkData(VisionDataset):
                  target_transform=None):
         super().__init__(
             root, transform=transform, target_transform=target_transform)
+        self.mode = mode
         self.img_folder = img_folder
         self.mask_folder = mask_folder
         self.label_folder = label_folder
+        self.seg_folder = 'seg_labels'
         self.images = list(
             sorted([f for f in os.listdir(os.path.join(self.root, img_folder)) if f.endswith('.jpg')]))
         self.masks = list(
             sorted([f for f in os.listdir(os.path.join(self.root, mask_folder)) if f.endswith('.json')]))
         self.labels = list(
             sorted([f for f in os.listdir(os.path.join(self.root, label_folder)) if f.endswith('.json')]))
+        self.seg_labels = list(
+            sorted([f for f in os.listdir(os.path.join(self.root, self.seg_folder)) if f.endswith('.json')]))
         self.color_to_class = create_palette(
             os.path.join(self.root, 'class_dict.csv'))
 
@@ -43,10 +51,12 @@ class ParkData(VisionDataset):
         img_path = os.path.join(self.root, self.img_folder, self.images[index])
         mask_path = os.path.join(self.root, self.mask_folder, self.masks[index])
         label_path = os.path.join(self.root, self.label_folder, self.labels[index])
+        seg_path = os.path.join(self.root, self.seg_folder, self.seg_labels[index])
         if '011951' in self.images[index] or '008953' in self.images[index] or '014768' in self.images[index]:
             img_path = os.path.join(self.root, self.img_folder, self.images[0])
             mask_path = os.path.join(self.root, self.mask_folder, self.masks[0])
             label_path = os.path.join(self.root, self.label_folder, self.labels[0])
+            seg_path = os.path.join(self.root, self.seg_folder, self.seg_labels[0])
         # mask_path = os.path.join(self.root, self.mask_folder, '007356.json')
         # print(self.masks[index])
         img = Image.open(img_path).convert('RGB')
@@ -56,6 +66,8 @@ class ParkData(VisionDataset):
         scale = input_size[0] / ori_size[0]
         img = img.resize(input_size)
 
+        labels = np.zeros(input_size, dtype=np.uint8)
+        ### freespace gt
         with open(mask_path, 'r', encoding='utf-8') as file:
             mask_dct = json.load(file)
         objects = mask_dct['objects'][0]
@@ -69,8 +81,44 @@ class ParkData(VisionDataset):
         else:
             points = [[min(item[0]*scale,input_size[0]-1), min(item[1]*scale,input_size[1]-1)] for item in objects['point_list']]
             mask_idx = shape_to_mask(img.size, points)
-
-
+        labels[mask_idx] = 1
+        ### seg gt
+        with open(seg_path, 'r', encoding='utf-8') as file:
+            seg_dct = json.load(file)
+        objects = seg_dct['objects']
+        ego_flag = True
+        for i in range(len(objects)):
+            if 'Multi' in objects[i]['feature_type']:
+                points = [[min(item[0]*scale,input_size[0]-1), min(item[1]*scale,input_size[1]-1)] for item in objects[i]['point_list'][0]]
+                mask_idx = shape_to_mask(img.size, points)
+                for j in range(1, len(objects[i]['point_list'])):
+                    points = [[min(item[0]*scale,input_size[0]-1), min(item[1]*scale,input_size[1]-1)] for item in objects[i]['point_list'][j]]
+                    mask_idx1 = shape_to_mask(img.size, points)
+                    mask_idx = np.logical_or(mask_idx, mask_idx1)
+            else:
+                points = [[min(item[0]*scale,input_size[0]-1), min(item[1]*scale,input_size[1]-1)] for item in objects[i]['point_list']]
+                mask_idx = shape_to_mask(img.size, points)
+            if objects[i]['category']=='speed_bump':
+                labels[mask_idx] = 2
+            if objects[i]['category'] == 'road_sign':
+                labels[mask_idx] = 3
+            if objects[i]['category'] in ['slot_line', 'lane']:
+                labels[mask_idx] = 4
+            if objects[i]['category']=='ego':
+                ego_mask_idx = shape_to_mask(img.size, points)
+                ego_flag = False
+        if ego_flag:
+            print(seg_path)
+            object_pts = [[444.19,342.6694],[582.0035,342.926],[582.3517,685.95],[443.98, 686.34]]
+            points = [[min(item[0]*scale,input_size[0]-1), min(item[1]*scale,input_size[1]-1)] for item in object_pts]
+            mask_idx = shape_to_mask(img.size, points)
+            labels[mask_idx] = 0
+        else:
+            labels[ego_mask_idx] = 0
+        # fs_labels = np.zeros(input_size, dtype=np.int64)
+        # fs_labels[mask_idx] = 1
+        
+        ### pld gt
         with open(label_path, 'r', encoding='utf-8') as file:
             label_dct = json.load(file)
         slots = label_dct['objects']
@@ -88,17 +136,34 @@ class ParkData(VisionDataset):
         # pld_cls = tuple([pld_cls])
         # pld_pts = tuple([pld_pts])
 
+        if self.mode == 'train':
+            ### data aug
+            r1 = random.randrange(40, 140) / 100
+            img = (np.array(img) * r1).clip(0, 255).astype(np.uint8)
+            img = Image.fromarray(img)
+
+            if random.random() < 0.5:
+                img, labels, pld_pts = flip_data(img, labels, pld_pts)
+
+            prob = random.random()
+            if prob < 0.4:
+                angle = 90
+                if random.random() < 0.5:
+                    angle = 270
+                img, labels, pld_pts = rotate_data(img, labels, pld_pts, angle)
+            elif prob < 0.7:
+                angle = random.randrange(-90, 90)
+                angle = (360 - angle) if angle < 0 else angle
+                img, labels, pld_pts = rotate_data(img, labels, pld_pts, angle)
+
+        labels = labels.astype(np.int64)
+        if self.target_transform is not None:
+            labels = self.target_transform(labels)
+
         if self.transform is not None:
             img = self.transform(img)
 
-        # Convert the RGB values to class indices
-        fs_labels = np.zeros(input_size, dtype=np.int64)
-        fs_labels[mask_idx] = 1
-
-        if self.target_transform is not None:
-            fs_labels = self.target_transform(fs_labels)
-
-        data_samples = dict(fs_labels=fs_labels, pld_cls=pld_cls, pld_pts=pld_pts,
+        data_samples = dict(fs_labels=labels, pld_cls=pld_cls, pld_pts=pld_pts,
                             img_path=img_path, mask_path=mask_path, label_path=label_path)
         return img, data_samples
 

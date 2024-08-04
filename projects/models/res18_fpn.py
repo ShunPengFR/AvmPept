@@ -7,9 +7,11 @@ from torch import Tensor
 from torchvision.ops import focal_loss
 import math
 
+from projects.loss.lovasz_losses import lovasz_softmax
+
 
 class ParkModel(BaseModel): 
-    def __init__(self, task_name):
+    def __init__(self, task_name, num_seg_cls):
         super().__init__()
         self.task_name = task_name
         self.backbone = resnet_fpn_backbone('resnet18', pretrained=True, returned_layers=[2, 3, 4])
@@ -49,7 +51,7 @@ class ParkModel(BaseModel):
                 nn.Conv2d(256, 128, kernel_size=3, padding=1, bias=False),
                 nn.BatchNorm2d(128),
                 nn.ReLU(inplace=True),
-                nn.Conv2d(128, 2, kernel_size=1, padding=0),
+                nn.Conv2d(128, num_seg_cls, kernel_size=1, padding=0),
             )
         debug = 0
 
@@ -156,7 +158,9 @@ class ParkModel(BaseModel):
         return loss_pld
 
     def cal_seg_loss(self, seg_pres: Tensor, seg_labels: Tensor):
-        loss_seg = F.cross_entropy(seg_pres, seg_labels)
+        ce_loss = F.cross_entropy(seg_pres, seg_labels)
+        lovasz_loss = lovasz_softmax(seg_pres, seg_labels)
+        loss_seg = 1.0*ce_loss + 1.0*lovasz_loss
         return loss_seg
     
     def get_gt_map(self, data_samples, input_size, featmap_size):
