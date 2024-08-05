@@ -31,6 +31,6 @@ data_loader, model用**pytorch**搭建，训练测试runner用**mmengine**搭建
 
 权重下载：待上传
 
-视频效果：https://www.bilibili.com/video/BV1r5i3eSEbk/?spm_id_from=333.999.0.0
+视频效果：https://www.bilibili.com/video/BV1xYade6EK4/?spm_id_from=333.999.0.0&vd_source=2a07defc3887b243207c8c9e58827595
 
 https://space.bilibili.com/328243224/video
