@@ -77,19 +77,19 @@ class ParkModel(BaseModel):
             if ('multi_task' in self.task_name):
                 # pld loss
                 cls_gts, pts_gts = self.get_gt_map(data_samples, input_size, featmap_size)
-                loss_pld = self.cal_pld_loss(scores, pts_preds, cls_gts, pts_gts)
+                loss_pld = self.cal_pld_loss(scores, pts_preds, cls_gts, pts_gts, featmap_size)
                 # seg loss
                 loss_seg = self.cal_seg_loss(seg, data_samples['fs_labels'])
                 loss = 1.0*loss_seg + 1.0*loss_pld
             if ('pld' in self.task_name):
                 cls_gts, pts_gts = self.get_gt_map(data_samples, input_size, featmap_size)
-                loss = self.cal_pld_loss(scores, pts_preds, cls_gts, pts_gts)
+                loss = self.cal_pld_loss(scores, pts_preds, cls_gts, pts_gts, featmap_size)
             if ('freespace' in self.task_name):
                 loss = self.cal_seg_loss(seg, data_samples['fs_labels'])
             return {'loss': loss}
-        elif mode == 'predict':
-            seg = 0
-            return seg, data_samples
+        # elif mode == 'predict':
+        #     seg = 0
+        #     return seg, data_samples
         else:
             if ('pld' in self.task_name) or ('multi_task' in self.task_name):
                 ref_y = torch.linspace(0, featmap_size[1] - 1.0, featmap_size[1]) / featmap_size[1]
@@ -99,8 +99,8 @@ class ParkModel(BaseModel):
                 ref_2d = torch.stack((ref_x, ref_y), -1)
                 ref_2d = ref_2d.reshape(featmap_size[0] * featmap_size[1], -1)
 
-                scores = scores.cpu().sigmoid()
-                pts_preds = pts_preds.cpu()
+                scores = scores.cpu().detach().sigmoid()
+                pts_preds = pts_preds.cpu().detach()
                 preds = []
                 for i in range(pld_cls.shape[0]):
                     score = scores[i, :, :, :]
@@ -117,17 +117,19 @@ class ParkModel(BaseModel):
                     pts_pred[:,1] = pts_pred[:,1]/featmap_size[1] + ref_pt[:,1]
                     pts_pred[:,2:4] = pts_pred[:,2:4] + pts_pred[:,0:2]
                     pts_pred[:,4:] = pts_pred[:,4:] + pts_pred[:,0:2]
+                    # pts_pred[:,2:4] = pts_pred[:,2:4] + ref_pt[:,0:2]
+                    # pts_pred[:,4:] = pts_pred[:,4:] + ref_pt[:,0:2]
                     preds.append(dict(cls_pred=cls_pred, confi=confi, pts_pred=pts_pred))
 
             if ('multi_task' in self.task_name):
-                return preds, seg
+                return preds, seg.cpu().detach(), data_samples
             if ('pld' in self.task_name):
-                return preds
+                return preds, data_samples
             if ('freespace' in self.task_name):
-                return seg
+                return seg.cpu().detach(), data_samples
         
     def cal_pld_loss(self, scores: Tensor, pts_preds: Tensor,
-                     cls_gts: Tensor, pts_gts: Tensor):
+                     cls_gts: Tensor, pts_gts: Tensor, featmap_size):
         scores = scores.permute(0, 2, 3, 1).reshape(-1,3)
         pts_preds = pts_preds.permute(0, 2, 3, 1).reshape(-1,6)
         cls_gts = cls_gts.reshape(-1)
@@ -140,20 +142,30 @@ class ParkModel(BaseModel):
         if len(pos_idxs) > 0:
             pt0_preds = pts_preds[pos_idxs, :2]
             pt1_preds = pts_preds[pos_idxs, 2:4]
-            angle_preds = pts_preds[pos_idxs, 4:]
+            pt3_preds = pts_preds[pos_idxs, 4:]
             pt0_gts = pts_gts[pos_idxs, :2]
             pt1_gts = pts_gts[pos_idxs, 2:4]
-            angle_gts = pts_gts[pos_idxs, 4:]
+            pt3_gts = pts_gts[pos_idxs, 4:]
 
-            # L1Loss = nn.L1Loss()
-            loss_pt0 = F.l1_loss(pt0_preds, pt0_gts)
-            loss_pt1 = F.l1_loss(pt1_preds, pt1_gts)
-            loss_angle = F.l1_loss(angle_preds, angle_gts)
-            # loss_angle = F.MSELoss(angle_preds, angle_gts)
+            # # L1Loss = nn.L1Loss()
+            # loss_pt0 = F.l1_loss(pt0_preds, pt0_gts)
+            # loss_pt1 = F.l1_loss(pt1_preds, pt1_gts)
+            # loss_angle = F.l1_loss(pt3_preds, pt3_gts)
+            loss_pt0 = F.smooth_l1_loss(pt0_preds, pt0_gts)
+            loss_pt1 = F.smooth_l1_loss(pt1_preds, pt1_gts)
+            angle01_gts = torch.atan2(pt1_gts[:,1]-pt0_gts[:,1]/featmap_size[1], pt1_gts[:,0]-pt0_gts[:,0]/featmap_size[0])
+            angle01_preds = torch.atan2(pt1_preds[:,1]-pt0_preds[:,1]/featmap_size[1], pt1_preds[:,0]-pt0_preds[:,0]/featmap_size[0])
+            loss_angle01 = (F.smooth_l1_loss(angle01_preds.cos(), angle01_gts.cos()) +
+                          F.smooth_l1_loss(angle01_preds.sin(), angle01_gts.sin()))
+            loss_pt3 = F.smooth_l1_loss(pt3_preds, pt3_gts)
+            angle03_gts = torch.atan2(pt3_gts[:,1]-pt0_gts[:,1]/featmap_size[1], pt3_gts[:,0]-pt0_gts[:,0]/featmap_size[0])
+            angle03_preds = torch.atan2(pt3_preds[:,1]-pt0_preds[:,1]/featmap_size[1], pt3_preds[:,0]-pt0_preds[:,0]/featmap_size[0])
+            loss_angle03 = (F.smooth_l1_loss(angle03_preds.cos(), angle03_gts.cos()) +
+                          F.smooth_l1_loss(angle03_preds.sin(), angle03_gts.sin()))
+
+            loss_pld = 10.0*loss_cls + 4.0*loss_pt0 + 4.0*loss_pt1 + 2.0*loss_angle01 + 2.0*loss_angle03 + 0.2*loss_pt3
         else:
-            loss_pt0, loss_pt1, loss_angle = 0, 0, 0
-        
-        loss_pld = 10.0*loss_cls + 1.0*loss_pt0 + 4.0*loss_pt1 + 1.0*loss_angle
+            loss_pld = 0
 
         return loss_pld
 
@@ -177,13 +189,13 @@ class ParkModel(BaseModel):
                 row = min(row, featmap_size[1] - 1)
                 pts_gts[i, 0, row, col] = pt[3][0] / grid_size - col
                 pts_gts[i, 1, row, col] = pt[3][1] / grid_size - row
-                pts_gts[i, 2, row, col] = (pt[0][0] - pt[3][0]) / input_size[0]
-                pts_gts[i, 3, row, col] = (pt[0][1] - pt[3][1]) / input_size[1]
-                pts_gts[i, 4, row, col] = (pt[2][0] - pt[3][0]) / input_size[0]
-                pts_gts[i, 5, row, col] = (pt[2][1] - pt[3][1]) / input_size[1]
-                # radian = math.atan2(pld_marker[5] * featmap_size[1],
-                #             pld_marker[4] * featmap_size[0])
-                # gt_maps[i, 4, row, col] = math.cos(radian)
-                # gt_maps[i, 5, row, col] = math.sin(radian)
+                # pts_gts[i, 2, row, col] = (pt[0][0] - pt[3][0]) / input_size[0]
+                # pts_gts[i, 3, row, col] = (pt[0][1] - pt[3][1]) / input_size[1]
+                # pts_gts[i, 4, row, col] = (pt[2][0] - pt[3][0]) / input_size[0]
+                # pts_gts[i, 5, row, col] = (pt[2][1] - pt[3][1]) / input_size[1]
+                pts_gts[i, 2, row, col] = (pt[0][0] - col*grid_size) / input_size[0]
+                pts_gts[i, 3, row, col] = (pt[0][1] - row*grid_size) / input_size[1]
+                pts_gts[i, 4, row, col] = (pt[2][0] - col*grid_size) / input_size[0]
+                pts_gts[i, 5, row, col] = (pt[2][1] - row*grid_size) / input_size[1]
                 cls_gts[i, row, col] = data_samples['pld_cls'][i][j]
         return cls_gts, pts_gts

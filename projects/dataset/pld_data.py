@@ -28,6 +28,7 @@ class ParkData(VisionDataset):
         self.seg_folder = 'seg_labels'
         self.images = list(
             sorted([f for f in os.listdir(os.path.join(self.root, img_folder)) if f.endswith('.jpg')]))
+        # self.images = self.images[0:30]
         self.masks = list(
             sorted([f for f in os.listdir(os.path.join(self.root, mask_folder)) if f.endswith('.json')]))
         self.labels = list(
@@ -36,6 +37,7 @@ class ParkData(VisionDataset):
             sorted([f for f in os.listdir(os.path.join(self.root, self.seg_folder)) if f.endswith('.json')]))
 
     def __getitem__(self, index):
+        ### get file path, including img, fs_label, pld_label, seg_label
         img_path = os.path.join(self.root, self.img_folder, self.images[index])
         # mask_path = os.path.join(self.root, self.mask_folder, self.masks[index])
         label_path = os.path.join(self.root, self.label_folder, self.labels[index])
@@ -45,15 +47,16 @@ class ParkData(VisionDataset):
             # mask_path = os.path.join(self.root, self.mask_folder, self.masks[0])
             label_path = os.path.join(self.root, self.label_folder, self.labels[0])
             # seg_path = os.path.join(self.root, self.seg_folder, self.seg_labels[0])
-        # print(self.masks[index])
+        ### load img
         img = Image.open(img_path).convert('RGB')
         ori_size = img.size
         input_size = (512, 512)
-        input_size = (256, 256)
+        # input_size = (256, 256)
         scale = input_size[0] / ori_size[0]
         img = img.resize(input_size)
-
-        ### pld gt
+        ### fs & seg label
+        labels = np.zeros(input_size, dtype=np.uint8)
+        ### load pld gt
         with open(label_path, 'r', encoding='utf-8') as file:
             label_dct = json.load(file)
         slots = label_dct['objects']
@@ -68,37 +71,32 @@ class ParkData(VisionDataset):
             slot_pts = slots[i]['point_list']
             slot_pts = [[item[0]*scale, item[1]*scale] for item in slot_pts]
             pld_pts.append(slot_pts)
-        # pld_cls = tuple([pld_cls])
-        # pld_pts = tuple([pld_pts])
+        ### data augmentation
+        # if self.mode == 'train':
+        #     ## Brightness adjustment
+        #     r1 = random.randrange(40, 140) / 100
+        #     img = (np.array(img) * r1).clip(0, 255).astype(np.uint8)
+        #     img = Image.fromarray(img)
+        #     ## flip
+        #     if random.random() < 0.5:
+        #         img, labels, pld_pts = flip_data(img, labels, pld_pts)
+        #     ## rotate
+        #     prob = random.random()
+        #     if prob < 0.4:
+        #         angle = 90
+        #         if random.random() < 0.5:
+        #             angle = 270
+        #         img, labels, pld_pts = rotate_data(img, labels, pld_pts, angle)
+        #     elif prob < 0.7:
+        #         angle = random.randrange(-90, 90)
+        #         angle = (360 - angle) if angle < 0 else angle
+        #         img, labels, pld_pts = rotate_data(img, labels, pld_pts, angle)
 
-        labels = np.zeros(input_size, dtype=np.uint8)
-        if self.mode == 'train':
-            ### data aug
-            r1 = random.randrange(40, 140) / 100
-            img = (np.array(img) * r1).clip(0, 255).astype(np.uint8)
-            img = Image.fromarray(img)
-
-            if random.random() < 0.5:
-                img, labels, pld_pts = flip_data(img, labels, pld_pts)
-
-            prob = random.random()
-            if prob < 0.4:
-                angle = 90
-                if random.random() < 0.5:
-                    angle = 270
-                img, labels, pld_pts = rotate_data(img, labels, pld_pts, angle)
-            elif prob < 0.7:
-                angle = random.randrange(-90, 90)
-                angle = (360 - angle) if angle < 0 else angle
-                img, labels, pld_pts = rotate_data(img, labels, pld_pts, angle)
-
-        labels = labels.astype(np.int64)
         if self.transform is not None:
             img = self.transform(img)
 
         data_samples = dict(pld_cls=pld_cls, pld_pts=pld_pts,
                             img_path=img_path, label_path=label_path)
-        
         return img, data_samples
 
     def __len__(self):

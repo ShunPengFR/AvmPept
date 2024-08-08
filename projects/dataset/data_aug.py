@@ -1,10 +1,7 @@
-import os
 import numpy as np
 import torch
-from torchvision.datasets import VisionDataset
 from PIL import Image, ImageDraw
 import cv2
-import json
 import random
 import math
 
@@ -17,11 +14,6 @@ def rotate_data(img, labels, pld_pts, angle):
     rotated = Image.fromarray(rotated)
     labels = cv2.warpAffine(labels, rotation_matrix, input_size)
 
-    # angle_rad = math.pi * angle_degree / 180
-    #         xval = vector[0]*math.cos(angle_rad) + \
-    #             vector[1]*math.sin(angle_rad)
-    #         yval = -vector[0]*math.sin(angle_rad) + \
-    #             vector[1]*math.cos(angle_rad)
     angle_rad = math.pi * angle / 180
     angle_sin = math.sin(angle_rad)
     angle_cos = math.cos(angle_rad)
@@ -40,6 +32,7 @@ def rotate_data(img, labels, pld_pts, angle):
         pld_pts_out.append(pts_out)
 
     return rotated, labels, pld_pts_out
+
 
 def flip_data(img, labels, pld_pts):
     input_size = img.size
